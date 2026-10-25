@@ -1,0 +1,8 @@
+# Zależności
+node_modules/
+
+# Build produkcyjny (vite build)
+dist/
+
+# System
+.DS_Store

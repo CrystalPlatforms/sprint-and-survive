@@ -1,9 +1,29 @@
+import './style.css';
+
+// --- Elementy DOM ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const pointsDisplay = document.getElementById('points');
-const distanceDisplay = document.getElementById('distance');
 const statsDiv = document.getElementById('stats');
+let pointsDisplay = document.getElementById('points');
+let distanceDisplay = document.getElementById('distance');
 
+// --- Dźwięki (elementy <audio> z index.html) ---
+const sounds = {
+    start: document.getElementById('startGameSound'),
+    win: document.getElementById('winSound'),
+    fail: document.getElementById('failSound'),
+    lobby: document.getElementById('lobbyMusic')
+};
+
+function playSound(audio) {
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.play().catch(() => {
+        // Przeglądarka blokuje dźwięk przed pierwszą interakcją użytkownika
+    });
+}
+
+// --- Stan gry ---
 const player = {
     x: 50,
     y: 200,
@@ -53,7 +73,7 @@ const buttons = {
     },
     howToPlay: {
         x: canvas.width / 2 - 150,
-        y: canvas.height / 2 + 90, // Pod przyciskiem start
+        y: canvas.height / 2 + 90,
         width: 300,
         height: 50,
         text: 'Jak grać',
@@ -72,15 +92,11 @@ const buttons = {
 };
 
 let hoveredButton = null;
-
 let currentLanguage = 'pl';
 
 const translations = {
     pl: {
         title: "Sprint'n Survive",
-        controls: 'Sterowanie:',
-        spaceControl: 'SPACJA - skok',
-        arrowsControl: 'STRZAŁKI - ruch góra/dół',
         startButton: 'Rozpocznij grę',
         replayButton: 'Zagraj ponownie',
         menuButton: 'Wróć do menu',
@@ -101,9 +117,6 @@ const translations = {
     },
     en: {
         title: "Sprint'n Survive",
-        controls: 'Controls:',
-        spaceControl: 'SPACE - jump',
-        arrowsControl: 'ARROWS - move up/down',
         startButton: 'Start Game',
         replayButton: 'Play Again',
         menuButton: 'Back to Menu',
@@ -124,9 +137,6 @@ const translations = {
     },
     cn: {
         title: "Sprint'n Survive",
-        controls: '控制：',
-        spaceControl: '空格键 - 跳跃',
-        arrowsControl: '方向键 - 上下移动',
         startButton: '开始游戏',
         replayButton: '再玩一次',
         menuButton: '返回菜单',
@@ -148,57 +158,43 @@ const translations = {
 };
 
 const languageButtons = {
-    pl: {
-        x: 20,
-        y: 20,
-        width: 40,
-        height: 40,
-        text: 'PL',
-        color: '#666666',
-        hoverColor: '#888888'
-    },
-    en: {
-        x: 70,
-        y: 20,
-        width: 40,
-        height: 40,
-        text: 'EN',
-        color: '#666666',
-        hoverColor: '#888888'
-    },
-    cn: {
-        x: 120,
-        y: 20,
-        width: 40,
-        height: 40,
-        text: 'CN',
-        color: '#666666',
-        hoverColor: '#888888'
-    }
+    pl: { x: 20, y: 20, width: 40, height: 40, text: 'PL', color: '#666666', hoverColor: '#888888' },
+    en: { x: 70, y: 20, width: 40, height: 40, text: 'EN', color: '#666666', hoverColor: '#888888' },
+    cn: { x: 120, y: 20, width: 40, height: 40, text: 'CN', color: '#666666', hoverColor: '#888888' }
 };
 
 function updateButtonTexts() {
-    buttons.start.text = translations[currentLanguage].startButton;
-    buttons.replay.text = translations[currentLanguage].replayButton;
-    buttons.menu.text = translations[currentLanguage].menuButton;
-    buttons.howToPlay.text = translations[currentLanguage].howToPlayButton;
-    buttons.back.text = translations[currentLanguage].backButton;
+    const t = translations[currentLanguage];
+    buttons.start.text = t.startButton;
+    buttons.replay.text = t.replayButton;
+    buttons.menu.text = t.menuButton;
+    buttons.howToPlay.text = t.howToPlayButton;
+    buttons.back.text = t.backButton;
+}
+
+// Przebudowuje pasek statystyk (potrzebne po zmianie języka) i odświeża referencje
+function rebuildStatsBar() {
+    const t = translations[currentLanguage];
+    statsDiv.innerHTML =
+        `<span id="points-label">${t.points}:</span> <span id="points">0</span> | ` +
+        `<span id="distance-label">${t.distance}:</span> <span id="distance">1000</span>m`;
+    pointsDisplay = document.getElementById('points');
+    distanceDisplay = document.getElementById('distance');
 }
 
 function createObstacle() {
     const height = Math.random() * 100 + 50;
-    const obstacle = {
+    obstacles.push({
         x: canvas.width,
         y: canvas.height - height,
         width: 30,
         height: height
-    };
-    obstacles.push(obstacle);
+    });
 }
 
 function update() {
     if (gameState !== 'playing') return;
-    
+
     // Aktualizacja pozycji gracza
     player.velocityY += player.gravity;
     player.y += player.velocityY;
@@ -218,14 +214,13 @@ function update() {
     // Aktualizacja przeszkód
     for (let i = obstacles.length - 1; i >= 0; i--) {
         obstacles[i].x -= obstacleSpeed;
-        
-        // Usuwanie przeszkód poza ekranem
+
+        // Usuwanie przeszkód poza ekranem (punkt za ominięcie)
         if (obstacles[i].x + obstacles[i].width < 0) {
             obstacles.splice(i, 1);
             points += 10;
-            if (pointsDisplay) {
-                pointsDisplay.textContent = points;
-            }
+            pointsDisplay.textContent = points;
+            continue;
         }
 
         // Kolizja z przeszkodą
@@ -235,16 +230,14 @@ function update() {
     }
 
     // Dodawanie nowych przeszkód
-    if (obstacles.length === 0 || 
+    if (obstacles.length === 0 ||
         obstacles[obstacles.length - 1].x < canvas.width - 300) {
         createObstacle();
     }
 
     // Aktualizacja dystansu do mety
     distance = Math.max(0, distance - 0.1);
-    if (distanceDisplay) {
-        distanceDisplay.textContent = Math.floor(distance);
-    }
+    distanceDisplay.textContent = Math.floor(distance);
 
     // Sprawdzenie czy gracz dotarł do mety
     if (distance <= 0) {
@@ -296,23 +289,23 @@ function draw() {
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    // Wyświetlanie menu
+    // Ekran menu i instrukcji
     if (gameState === 'menu') {
         drawMenu();
     } else if (gameState === 'howToPlay') {
         drawHowToPlay();
     }
-    
-    // Wyświetlanie komunikatu o przegranej/wygranej
+
+    // Komunikat o przegranej/wygranej
     if (gameState === 'over' || gameState === 'won') {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
+
         ctx.fillStyle = 'white';
         ctx.font = 'bold 30px "Comic Neue"';
         ctx.textAlign = 'center';
         ctx.fillText(message, canvas.width / 2, canvas.height / 2 - 60);
-        
+
         drawButton(buttons.replay);
         drawButton(buttons.menu);
     }
@@ -335,12 +328,14 @@ function gameOver() {
     gameState = 'over';
     message = translations[currentLanguage].gameOver + ' ' + points;
     statsDiv.style.display = 'none';
+    playSound(sounds.fail);
 }
 
 function win() {
     gameState = 'won';
     message = translations[currentLanguage].victory + ' ' + points;
     statsDiv.style.display = 'none';
+    playSound(sounds.win);
 }
 
 function resetGame() {
@@ -350,40 +345,44 @@ function resetGame() {
     player.y = 200;
     player.velocityY = 0;
     player.isJumping = false;
-    
-    if (statsDiv) {
-        if (gameState === 'playing') {
-            statsDiv.style.display = 'block';
-            pointsDisplay.textContent = '0';
-            distanceDisplay.textContent = '1000';
-        } else {
-            statsDiv.style.display = 'none';
-        }
-    }
+
+    statsDiv.style.display = gameState === 'playing' ? 'block' : 'none';
+    pointsDisplay.textContent = '0';
+    distanceDisplay.textContent = '1000';
 }
 
-// Funkcja rysowania menu
+function startGame() {
+    gameState = 'playing';
+    resetGame();
+    if (sounds.lobby) sounds.lobby.pause();
+    playSound(sounds.start);
+}
+
+function enterMenu() {
+    gameState = 'menu';
+    resetGame();
+    playSound(sounds.lobby);
+}
+
+// --- Rysowanie ---
 function drawMenu() {
     const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
     gradient.addColorStop(0, '#1a1a1a');
     gradient.addColorStop(1, '#2d2d2d');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Rysuj przyciski języków
-    Object.values(languageButtons).forEach(button => {
-        drawLanguageButton(button);
-    });
-    
-    // Rysuj tytuł
+
+    Object.values(languageButtons).forEach(drawLanguageButton);
+
     ctx.shadowColor = '#4CAF50';
     ctx.shadowBlur = 15;
     ctx.fillStyle = 'white';
     ctx.font = 'bold 60px "Comic Neue"';
     ctx.textAlign = 'center';
     ctx.fillText(translations[currentLanguage].title, canvas.width / 2, canvas.height / 2 - 80);
-    
-    // Rysuj przyciski
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+
     drawButton(buttons.start);
     drawButton(buttons.howToPlay);
 }
@@ -403,193 +402,34 @@ function drawButton(button) {
 
     // Reset cienia dla tekstu
     ctx.shadowColor = 'transparent';
-    
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
     // Tekst przycisku
     ctx.fillStyle = 'white';
     ctx.font = 'bold 24px "Comic Neue"';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(button.text, button.x + button.width/2, button.y + button.height/2);
+    ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2);
 }
 
-function isClickInside(pos, button) {
-    return pos.x > button.x && 
-           pos.x < button.x + button.width && 
-           pos.y > button.y && 
-           pos.y < button.y + button.height;
-}
-
-canvas.addEventListener('click', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const pos = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-    };
-
-    if (gameState === 'menu') {
-        // Sprawdź kliknięcia w przyciski języka
-        Object.entries(languageButtons).forEach(([lang, button]) => {
-            if (isClickInside(pos, button)) {
-                currentLanguage = lang;
-                updateButtonTexts();
-                // Zaktualizuj tekst w pasku statystyk
-                document.getElementById('stats').innerHTML = 
-                    `${translations[currentLanguage].points}: <span id="points">0</span> | 
-                     ${translations[currentLanguage].distance}: <span id="distance">1000</span>m`;
-                updateReferences();
-            }
-        });
-        
-        // Sprawdź kliknięcie w przycisk start
-        if (isClickInside(pos, buttons.start)) {
-            gameState = 'playing';
-            if (statsDiv) {
-                statsDiv.style.display = 'block';
-                updateReferences(); // Aktualizuj referencje
-                pointsDisplay.textContent = '0';
-                distanceDisplay.textContent = '1000';
-            }
-            resetGame();
-        } else if (isClickInside(pos, buttons.howToPlay)) {
-            gameState = 'howToPlay';
-        }
-    } else if (gameState === 'howToPlay') {
-        if (isClickInside(pos, buttons.back)) {
-            gameState = 'menu';
-        }
-    } else if (gameState === 'over' || gameState === 'won') {
-        if (isClickInside(pos, buttons.replay)) {
-            gameState = 'playing';
-            resetGame();
-            statsDiv.style.display = 'block';
-        } else if (isClickInside(pos, buttons.menu)) {
-            gameState = 'menu';
-            resetGame();
-        }
-    }
-});
-
-document.addEventListener('keydown', (e) => {
-    if (gameState === 'playing') {
-        switch(e.code) {
-            case 'Space':
-                if (!player.isJumping) {
-                    player.velocityY = -player.jumpForce;
-                    player.isJumping = true;
-                }
-                break;
-            case 'ArrowUp':
-                player.y -= player.speed;
-                break;
-            case 'ArrowDown':
-                player.y += player.speed;
-                break;
-        }
-    }
-});
-
-// Rozpoczęcie gry
-gameState = 'menu';
-animate();
-
-canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const pos = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-    };
-
-    hoveredButton = null;
-    
-    if (gameState === 'menu') {
-        if (isClickInside(pos, buttons.start)) {
-            hoveredButton = buttons.start;
-        } else if (isClickInside(pos, buttons.howToPlay)) {
-            hoveredButton = buttons.howToPlay;
-        }
-        // Sprawdź hover dla przycisków języka
-        Object.entries(languageButtons).forEach(([lang, button]) => {
-            if (isClickInside(pos, button)) {
-                hoveredButton = button;
-            }
-        });
-    } else if (gameState === 'over' || gameState === 'won') {
-        if (isClickInside(pos, buttons.replay)) {
-            hoveredButton = buttons.replay;
-        } else if (isClickInside(pos, buttons.menu)) {
-            hoveredButton = buttons.menu;
-        } else if (isClickInside(pos, buttons.howToPlay)) {
-            hoveredButton = buttons.howToPlay;
-        }
-    } else if (gameState === 'howToPlay') {
-        if (isClickInside(pos, buttons.back)) {
-            hoveredButton = buttons.back;
-        }
-    }
-});
-
-// Dodaj efekt kursora
-canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const pos = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-    };
-
-    let isOverButton = false;
-    
-    if (gameState === 'menu') {
-        isOverButton = isClickInside(pos, buttons.start);
-        // Dodaj sprawdzanie przycisków języka
-        Object.values(languageButtons).forEach(button => {
-            if (isClickInside(pos, button)) {
-                isOverButton = true;
-            }
-        });
-    } else if (gameState === 'over' || gameState === 'won') {
-        isOverButton = isClickInside(pos, buttons.replay) || isClickInside(pos, buttons.menu) || isClickInside(pos, buttons.howToPlay);
-    } else if (gameState === 'howToPlay') {
-        isOverButton = isClickInside(pos, buttons.back);
-    }
-
-    canvas.style.cursor = isOverButton ? 'pointer' : 'default';
-});
-
-// Zapobieganie przewijaniu strony
-window.addEventListener('keydown', function(e) {
-    if(e.code === 'Space' && e.target === document.body) {
-        e.preventDefault();
-    }
-});
-
-// Zapobieganie przewijaniu na urządzeniach mobilnych
-document.body.addEventListener('touchmove', function(e) {
-    e.preventDefault();
-}, { passive: false });
-
-updateButtonTexts();
-
-// Dodaj funkcję drawLanguageButton po funkcji drawButton:
 function drawLanguageButton(button) {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
     ctx.shadowBlur = 5;
-    
-    // Tło przycisku
+
     ctx.fillStyle = button === hoveredButton ? button.hoverColor : button.color;
     ctx.beginPath();
     ctx.roundRect(button.x, button.y, button.width, button.height, 5);
     ctx.fill();
-    
-    // Tekst przycisku
+
     ctx.shadowColor = 'transparent';
     ctx.fillStyle = currentLanguage === button.text.toLowerCase() ? '#4CAF50' : 'white';
     ctx.font = 'bold 16px "Comic Neue"';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(button.text, button.x + button.width/2, button.y + button.height/2);
+    ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2);
 }
 
-// Dodaj funkcję rysowania ekranu instrukcji
 function drawHowToPlay() {
     const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
     gradient.addColorStop(0, '#1a1a1a');
@@ -597,7 +437,6 @@ function drawHowToPlay() {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Rysuj instrukcje
     ctx.fillStyle = 'white';
     ctx.textAlign = 'left';
     const instructions = translations[currentLanguage].instructions;
@@ -609,29 +448,109 @@ function drawHowToPlay() {
         ctx.fillText(line, 50, startY + (lineHeight * index));
     });
 
-    // Rysuj przycisk powrotu
     drawButton(buttons.back);
 }
 
-// Dodaj funkcję aktualizacji referencji
-function updateReferences() {
-    pointsDisplay = document.getElementById('points');
-    distanceDisplay = document.getElementById('distance');
-    statsDiv = document.getElementById('stats');
-    
-    // Sprawdź czy elementy istnieją
-    if (!pointsDisplay || !distanceDisplay || !statsDiv) {
-        console.error('Nie można znaleźć elementów DOM');
-        return;
-    }
-    
-    // Aktualizuj etykiety zgodnie z wybranym językiem
-    document.getElementById('points-label').textContent = translations[currentLanguage].points + ':';
-    document.getElementById('distance-label').textContent = translations[currentLanguage].distance + ':';
+// --- Zdarzenia ---
+function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
 }
 
-// Dodaj sprawdzenie pozycji przycisku start
-console.log('Start button position:', buttons.start); // Dodaj dla debugowania
+function isClickInside(pos, button) {
+    return pos.x > button.x &&
+           pos.x < button.x + button.width &&
+           pos.y > button.y &&
+           pos.y < button.y + button.height;
+}
 
-// Na początku pliku, po deklaracji zmiennych:
-updateReferences();
+canvas.addEventListener('click', (e) => {
+    const pos = getMousePos(e);
+
+    if (gameState === 'menu') {
+        // Przyciski języków
+        Object.entries(languageButtons).forEach(([lang, button]) => {
+            if (isClickInside(pos, button)) {
+                currentLanguage = lang;
+                updateButtonTexts();
+                rebuildStatsBar();
+            }
+        });
+
+        if (isClickInside(pos, buttons.start)) {
+            startGame();
+        } else if (isClickInside(pos, buttons.howToPlay)) {
+            gameState = 'howToPlay';
+        }
+    } else if (gameState === 'howToPlay') {
+        if (isClickInside(pos, buttons.back)) {
+            enterMenu();
+        }
+    } else if (gameState === 'over' || gameState === 'won') {
+        if (isClickInside(pos, buttons.replay)) {
+            startGame();
+        } else if (isClickInside(pos, buttons.menu)) {
+            enterMenu();
+        }
+    }
+});
+
+// Hover nad przyciskami + kursor
+canvas.addEventListener('mousemove', (e) => {
+    const pos = getMousePos(e);
+    hoveredButton = null;
+
+    if (gameState === 'menu') {
+        if (isClickInside(pos, buttons.start)) {
+            hoveredButton = buttons.start;
+        } else if (isClickInside(pos, buttons.howToPlay)) {
+            hoveredButton = buttons.howToPlay;
+        } else {
+            Object.values(languageButtons).forEach(button => {
+                if (isClickInside(pos, button)) {
+                    hoveredButton = button;
+                }
+            });
+        }
+    } else if (gameState === 'howToPlay') {
+        if (isClickInside(pos, buttons.back)) {
+            hoveredButton = buttons.back;
+        }
+    } else if (gameState === 'over' || gameState === 'won') {
+        if (isClickInside(pos, buttons.replay)) {
+            hoveredButton = buttons.replay;
+        } else if (isClickInside(pos, buttons.menu)) {
+            hoveredButton = buttons.menu;
+        }
+    }
+
+    canvas.style.cursor = hoveredButton ? 'pointer' : 'default';
+});
+
+// Sterowanie klawiaturą
+document.addEventListener('keydown', (e) => {
+    if (gameState !== 'playing') return;
+
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (!player.isJumping) {
+            player.velocityY = -player.jumpForce;
+            player.isJumping = true;
+        }
+    } else if (e.code === 'ArrowUp') {
+        e.preventDefault();
+        player.y -= player.speed;
+    } else if (e.code === 'ArrowDown') {
+        e.preventDefault();
+        player.y += player.speed;
+    }
+});
+
+// Zapobieganie przewijaniu na urządzeniach mobilnych
+document.body.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+}, { passive: false });
+
+// --- Start ---
+updateButtonTexts();
+animate();
